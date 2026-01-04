@@ -7,21 +7,13 @@ interface PageProps {
 }
 
 export default async function Home({ searchParams }: PageProps) {
-  // 1. Resolvemos os parâmetros da URL (Next.js 15+)
   const resolvedParams = await searchParams;
 
-  // 2. Definimos valores padrão e tratamos os tipos
-  // Se não houver nada na URL, ele busca CBLOL 2025 Split 2 e 30 dias
-  const tournament = typeof resolvedParams.tournament === 'string' 
-    ? resolvedParams.tournament 
-    : "CBLOL 2025 Split 2";
+const league = typeof resolvedParams.league === 'string' ? resolvedParams.league : "CBLOL";
+const year = typeof resolvedParams.year === 'string' ? resolvedParams.year : "2024";
+const split = typeof resolvedParams.split === 'string' ? resolvedParams.split : "Split 1";
 
-  const days = typeof resolvedParams.days === 'string' 
-    ? parseInt(resolvedParams.days, 10) 
-    : 30;
-
-  // 3. Buscamos as partidas com os filtros dinâmicos
-  const matches: CargoMatch[] = await fetchLeaguepediaMatches(tournament, days);
+const matches = await fetchLeaguepediaMatches(league, year, split);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">

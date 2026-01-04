@@ -1,56 +1,53 @@
 import { CargoMatch } from "@/types/leaguepedia";
+import { cache } from 'react';
 
 const BASE_URL = "https://lol.fandom.com/api.php";
 
-export async function fetchLeaguepediaMatches(
-  tournament: string, 
-  days: number        
-): Promise<CargoMatch[]> {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  const dateStr = date.toISOString().replace('T', ' ').split('.')[0];
+// Usamos cache para evitar que o Next.js 16 dispare a mesma busca duas vezes no terminal
+export const fetchLeaguepediaMatches = cache(async (league: string, year: string, split: string): Promise<CargoMatch[]> => {
+  let searchLeague = league;
+  let searchSplit = split;
+
+  // 1. Mapeamento de Mudança de Nome (2025)
+  if (year === "2025") {
+    if (league === "CBLOL") searchLeague = "LTA South"; //
+    if (league === "LCS") searchLeague = "LTA North";   //
+  }
+
+  // 2. Tradução de Splits Internacionais (Spring/Summer)
+  const intlLitues = ["LCK", "LPL", "LEC", "LCS", "LTA North", "LTA South"];
+  if (intlLitues.includes(searchLeague)) {
+    if (split === "Split 1") searchSplit = "Spring";
+    if (split === "Split 2") searchSplit = "Summer";
+  }
+
+  // Busca flexível com LIKE para evitar erros de nomenclatura exata
+  const queryWhere = `SG.Tournament LIKE '%${searchLeague}%' AND SG.Tournament LIKE '%${year}%' AND SG.Tournament LIKE '%${searchSplit}%'`;
 
   const params = new URLSearchParams({
     action: "cargoquery",
     format: "json",
     tables: "ScoreboardGames=SG",
     fields: "SG.Tournament, SG.Team1, SG.Team2, SG.WinTeam, SG.DateTime_UTC",
-    // Filtro dinâmico: Torneio AND Data
-    where: `SG.Tournament = '${tournament}' AND SG.DateTime_UTC >= '${dateStr}'`,
+    where: queryWhere,
     order_by: "SG.DateTime_UTC DESC",
-    limit: "50"
+    limit: "100"
   });
+
+  console.log(`🔍 API: ${searchLeague} ${year} ${searchSplit}`);
 
   try {
     const response = await fetch(`${BASE_URL}?${params.toString()}`, {
-      headers: {
-        // MUDE ESTE USER-AGENT para algo bem específico seu
-        "User-Agent": "AnalyticsBetLoL_Project_Verao_v1" 
-      },
-      next: { revalidate: 60 } // Cache de 1 minuto
+      headers: { "User-Agent": "ProjetoVerao_Analytics_v5_Bertolazi" },
+      next: { revalidate: 3600 } 
     });
 
     const data = await response.json();
-
-    // DEBUG: Veja no seu terminal o que a API realmente respondeu
-    // console.log("Resposta da API:", JSON.stringify(data, null, 2));
-
-    // 1. Verifica se a API retornou um erro estruturado (como Rate Limit)
-    if (data.error) {
-      console.error("❌ Erro reportado pela API:", data.error.code, "-", data.error.info);
-      return [];
-    }
-
-    // 2. Verifica se 'cargoquery' existe e é uma lista antes de usar o .map()
-    if (!data.cargoquery || !Array.isArray(data.cargoquery)) {
-      console.warn("⚠️ A API retornou sucesso, mas sem dados (cargoquery vazio).");
-      return [];
-    }
-
+    if (data.error || !data.cargoquery) return [];
+    
     return data.cargoquery.map((item: any) => item.title as CargoMatch);
-
   } catch (error) {
-    console.error("❌ Falha crítica na requisição:", error);
+    console.error("❌ Erro:", error);
     return [];
   }
-}
+}); // <-- Certifique-se de que este fechamento está exatamente assim
